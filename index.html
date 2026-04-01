@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WrangleTangle</title>
+    <meta
+      name="description"
+      content="WrangleTangle app downloads, updates, and release links."
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5efe3;
+        --panel: rgba(255, 252, 246, 0.92);
+        --ink: #1d1a17;
+        --muted: #655d52;
+        --line: rgba(29, 26, 23, 0.12);
+        --accent: #cc5f2f;
+        --accent-dark: #9e431c;
+        --sand: #e7cf9f;
+        --olive: #74846a;
+        --shadow: 0 24px 80px rgba(74, 43, 24, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Georgia, "Times New Roman", serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(231, 207, 159, 0.7), transparent 32%),
+          radial-gradient(circle at top right, rgba(116, 132, 106, 0.26), transparent 28%),
+          linear-gradient(180deg, #fbf7ee 0%, var(--bg) 52%, #efe1c6 100%);
+      }
+
+      .shell {
+        width: min(1120px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 32px 0 72px;
+      }
+
+      .hero {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        padding: 32px;
+        background:
+          linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(247, 239, 223, 0.94)),
+          linear-gradient(180deg, rgba(204, 95, 47, 0.06), rgba(116, 132, 106, 0.06));
+        box-shadow: var(--shadow);
+      }
+
+      .hero::after {
+        content: "";
+        position: absolute;
+        inset: auto -80px -90px auto;
+        width: 260px;
+        height: 260px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(204, 95, 47, 0.22), transparent 68%);
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.72);
+        font-size: 0.82rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 18px 0 12px;
+        max-width: 10ch;
+        font-size: clamp(3rem, 7vw, 5.8rem);
+        line-height: 0.92;
+        letter-spacing: -0.05em;
+      }
+
+      .lede {
+        max-width: 640px;
+        margin: 0;
+        font-size: 1.1rem;
+        line-height: 1.7;
+        color: var(--muted);
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.4fr 0.8fr;
+        gap: 24px;
+        align-items: end;
+        margin-top: 28px;
+      }
+
+      .status-card,
+      .app-card {
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: var(--panel);
+        backdrop-filter: blur(10px);
+      }
+
+      .status-card {
+        padding: 22px;
+      }
+
+      .status-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .metric {
+        padding: 14px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .metric-label {
+        display: block;
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .metric-value {
+        display: block;
+        margin-top: 10px;
+        font-size: 1.1rem;
+      }
+
+      .apps {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px;
+        margin-top: 24px;
+      }
+
+      .app-card {
+        display: flex;
+        flex-direction: column;
+        padding: 22px;
+        box-shadow: 0 18px 40px rgba(74, 43, 24, 0.08);
+      }
+
+      .app-card.featured {
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 241, 228, 0.96));
+      }
+
+      .app-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .app-icon {
+        width: 58px;
+        height: 58px;
+        border-radius: 18px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, var(--accent), #e08d56);
+        color: white;
+        font-size: 1.25rem;
+        font-weight: bold;
+      }
+
+      .app-icon.secondary {
+        background: linear-gradient(135deg, var(--olive), #9ca889);
+      }
+
+      .badge {
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: rgba(204, 95, 47, 0.12);
+        color: var(--accent-dark);
+        font-size: 0.8rem;
+      }
+
+      .badge.pending {
+        background: rgba(116, 132, 106, 0.16);
+        color: #47513f;
+      }
+
+      h2 {
+        margin: 16px 0 8px;
+        font-size: 1.7rem;
+      }
+
+      .app-copy {
+        margin: 0 0 20px;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 22px;
+      }
+
+      .pill {
+        padding: 8px 11px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        font-size: 0.84rem;
+        background: rgba(255, 255, 255, 0.68);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: auto;
+      }
+
+      .button,
+      .button-muted {
+        appearance: none;
+        border: 0;
+        border-radius: 14px;
+        padding: 14px 18px;
+        font: inherit;
+        text-decoration: none;
+        transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+      }
+
+      .button {
+        background: var(--accent);
+        color: white;
+        box-shadow: 0 14px 28px rgba(204, 95, 47, 0.24);
+      }
+
+      .button:hover {
+        transform: translateY(-1px);
+        background: var(--accent-dark);
+      }
+
+      .button-muted {
+        background: rgba(29, 26, 23, 0.06);
+        color: var(--ink);
+      }
+
+      .button-muted:hover {
+        transform: translateY(-1px);
+        background: rgba(29, 26, 23, 0.1);
+      }
+
+      .footnote {
+        margin-top: 24px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        border: 1px dashed rgba(29, 26, 23, 0.18);
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.54);
+        line-height: 1.6;
+      }
+
+      footer {
+        margin-top: 26px;
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+
+      @media (max-width: 860px) {
+        .hero-grid,
+        .apps,
+        .status-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .hero {
+          padding: 24px;
+        }
+
+        h1 {
+          max-width: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="eyebrow">WrangleTangle Distribution</div>
+        <h1>Direct APK access for your field tools.</h1>
+        <p class="lede">
+          This is the live download surface for WrangleTangle Android builds. The
+          site is deployed and ready; add APK files into <strong>/downloads</strong>
+          in the repository to publish new app builds here.
+        </p>
+
+        <div class="hero-grid">
+          <div class="status-card">
+            <div class="status-grid">
+              <div class="metric">
+                <span class="metric-label">Domain</span>
+                <span class="metric-value">wrangletangle.com</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Project</span>
+                <span class="metric-value">v0-wrangle-tangle</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Current State</span>
+                <span class="metric-value">Ready for release</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="status-card">
+            <strong>How publishing works</strong>
+            <p class="app-copy" style="margin-top: 10px; margin-bottom: 0">
+              Drop an APK in <strong>/downloads</strong>, commit, and redeploy. The
+              direct link pattern is
+              <strong>wrangletangle.com/downloads/your-file.apk</strong>.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="apps" aria-label="Applications">
+        <article class="app-card featured">
+          <div class="app-head">
+            <div class="app-icon">WT</div>
+            <span class="badge">Primary app</span>
+          </div>
+          <h2>WrangleTangle Text</h2>
+          <p class="app-copy">
+            Messaging and coordination utility for direct device installs. The site
+            is wired for a production APK at <strong>/downloads/wt-text.apk</strong>.
+          </p>
+          <div class="meta">
+            <span class="pill">Android APK</span>
+            <span class="pill">Manual sideload</span>
+            <span class="pill">Filename: wt-text.apk</span>
+          </div>
+          <div class="actions">
+            <a class="button" href="/downloads/wt-text.apk">Download APK</a>
+            <a class="button-muted" href="/downloads/">Open Downloads Folder</a>
+          </div>
+        </article>
+
+        <article class="app-card">
+          <div class="app-head">
+            <div class="app-icon secondary">GPS</div>
+            <span class="badge pending">Coming next</span>
+          </div>
+          <h2>WT-GPS Share</h2>
+          <p class="app-copy">
+            Placeholder slot for the next package. When you are ready, add its APK
+            into <strong>/downloads</strong> and update this card with the new file
+            name.
+          </p>
+          <div class="meta">
+            <span class="pill">Reserved release lane</span>
+            <span class="pill">Ready for second app</span>
+          </div>
+          <div class="actions">
+            <span class="button-muted" aria-disabled="true">APK pending upload</span>
+          </div>
+        </article>
+      </section>
+
+      <section class="footnote">
+        The only remaining blocker for a working file download is the APK itself.
+        No APK file was present in the repo or on this machine when this site was
+        built. As soon as you add <strong>downloads/wt-text.apk</strong> and redeploy,
+        the main button above becomes a live direct download.
+      </section>
+
+      <footer>
+        WrangleTangle release page. Built for direct Vercel deployment from the
+        GitHub repository.
+      </footer>
+    </main>
+  </body>
+</html>
