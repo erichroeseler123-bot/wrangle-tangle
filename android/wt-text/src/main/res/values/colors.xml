@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="wt_text_primary">#2DD4BF</color>
+    <color name="wt_text_primary_dark">#0F766E</color>
+    <color name="wt_text_surface">#071613</color>
+    <color name="wt_text_background">#03110F</color>
+    <color name="wt_text_icon_bg">#08221D</color>
+    <color name="wt_text_icon_ring">#12322B</color>
+    <color name="wt_text_icon_fg">#F6F5F1</color>
+</resources>

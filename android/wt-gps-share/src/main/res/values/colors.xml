@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="wt_gps_primary">#4F46E5</color>
+    <color name="wt_gps_primary_dark">#312E81</color>
+    <color name="wt_gps_surface">#0A1020</color>
+    <color name="wt_gps_background">#050917</color>
+    <color name="wt_gps_icon_bg">#111C38</color>
+    <color name="wt_gps_icon_ring">#1D2B57</color>
+    <color name="wt_gps_icon_fg">#F8F8FB</color>
+</resources>
