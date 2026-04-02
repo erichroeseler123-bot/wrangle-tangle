@@ -229,6 +229,78 @@
         margin-top: auto;
       }
 
+      .phone-tools {
+        margin-top: 18px;
+        padding: 18px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.62);
+      }
+
+      .phone-tools h3 {
+        margin: 0 0 10px;
+        font-size: 1rem;
+      }
+
+      .phone-tools p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .qr-panel {
+        display: none;
+        margin-top: 14px;
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
+      }
+
+      .qr-panel[data-open="true"] {
+        display: block;
+      }
+
+      .qr-wrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        align-items: center;
+      }
+
+      .qr-card {
+        padding: 12px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: #fff;
+      }
+
+      .qr-card img {
+        display: block;
+        width: 220px;
+        max-width: 100%;
+        height: auto;
+      }
+
+      .install-note {
+        margin-top: 14px;
+        padding: 14px;
+        border-radius: 14px;
+        background: rgba(45, 212, 191, 0.1);
+        color: var(--ink);
+      }
+
+      .link-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+        padding: 10px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.84);
+        font-size: 0.85rem;
+        word-break: break-all;
+      }
+
       .button,
       .button-muted {
         appearance: none;
@@ -354,6 +426,31 @@
             <a class="button" href="/downloads/wt-text.apk">Download APK</a>
             <a class="button-muted" href="/downloads/index.html">Release Notes</a>
           </div>
+          <div class="phone-tools">
+            <h3>Or send it to your phone</h3>
+            <p>Use the QR code for the fastest install path, or copy the direct APK link and send it to yourself any way you want.</p>
+            <div class="actions" style="margin-top: 14px">
+              <button class="button-muted" type="button" data-qr-toggle>Scan to download</button>
+              <button class="button-muted" type="button" data-copy-link>Copy link</button>
+            </div>
+            <div class="qr-panel" data-qr-panel aria-live="polite">
+              <div class="qr-wrap">
+                <div class="qr-card">
+                  <img
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https%3A%2F%2Fwrangletangle.com%2Fdownloads%2Fwt-text.apk"
+                    alt="QR code for downloading WrangleTangle Text on your phone"
+                  />
+                </div>
+                <div>
+                  <p>Open your camera and scan this code to download directly on your Android device.</p>
+                  <div class="link-chip">https://wrangletangle.com/downloads/wt-text.apk</div>
+                  <div class="install-note">
+                    After download, tap the file to install. If Android warns you because this is an independent app, tap the option to continue installation.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </article>
 
         <article class="app-card">
@@ -389,5 +486,38 @@
         GitHub repository.
       </footer>
     </main>
+    <script>
+      (function () {
+        const apkUrl = "https://wrangletangle.com/downloads/wt-text.apk";
+        const qrToggle = document.querySelector("[data-qr-toggle]");
+        const qrPanel = document.querySelector("[data-qr-panel]");
+        const copyButton = document.querySelector("[data-copy-link]");
+
+        if (qrToggle && qrPanel) {
+          qrToggle.addEventListener("click", function () {
+            const isOpen = qrPanel.getAttribute("data-open") === "true";
+            qrPanel.setAttribute("data-open", String(!isOpen));
+            qrToggle.textContent = isOpen ? "Scan to download" : "Hide QR code";
+          });
+        }
+
+        if (copyButton) {
+          copyButton.addEventListener("click", async function () {
+            try {
+              await navigator.clipboard.writeText(apkUrl);
+              copyButton.textContent = "Link copied";
+              window.setTimeout(function () {
+                copyButton.textContent = "Copy link";
+              }, 1800);
+            } catch (error) {
+              copyButton.textContent = "Copy failed";
+              window.setTimeout(function () {
+                copyButton.textContent = "Copy link";
+              }, 1800);
+            }
+          });
+        }
+      })();
+    </script>
   </body>
 </html>
