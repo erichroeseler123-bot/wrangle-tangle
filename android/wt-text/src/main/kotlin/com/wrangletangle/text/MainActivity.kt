@@ -7,7 +7,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
-import android.telephony.SmsManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -30,10 +29,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.People
-import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -54,7 +53,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -63,8 +61,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 private val TealAccent = Color(0xFF2DD4BF)
 private val DarkSurface = Color(0xFF071613)
@@ -73,7 +69,8 @@ private val DarkBackground = Color(0xFF03110F)
 private enum class WrangleStage {
     PICK_RECIPIENTS,
     COMPOSE,
-    SENT
+    HANDOFF,
+    COMPLETE
 }
 
 data class ContactRecipient(
@@ -97,30 +94,18 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-    // The "WrangleTangle" Loop
-    suspend fun sendIndividualSms(message: String, recipients: List<String>) {
-        val smsManager = getSystemService(SmsManager::class.java)
-        recipients.forEachIndexed { index, number ->
-            smsManager.sendTextMessage(number, null, message, null, null)
-            if (index != recipients.lastIndex) {
-                delay(180)
-            }
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WrangleTangleScreen(activity: MainActivity) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var stage by remember { mutableStateOf(WrangleStage.PICK_RECIPIENTS) }
     var message by remember { mutableStateOf("") }
-    var lastSentMessage by remember { mutableStateOf("") }
-    var isSending by remember { mutableStateOf(false) }
+    var handoffMessage by remember { mutableStateOf("") }
+    var handoffIndex by remember { mutableStateOf(0) }
     val recipients = remember { mutableStateListOf<ContactRecipient>() }
-    val lastSentRecipients = remember { mutableStateListOf<ContactRecipient>() }
+    val handoffRecipients = remember { mutableStateListOf<ContactRecipient>() }
 
     val contactPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -138,28 +123,50 @@ private fun WrangleTangleScreen(activity: MainActivity) {
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { grantResults ->
-        val contactsGranted = grantResults[Manifest.permission.READ_CONTACTS] == true
-        val smsGranted = grantResults[Manifest.permission.SEND_SMS] == true
-
-        when {
-            contactsGranted && smsGranted -> contactPicker.launch(buildContactPickerIntent())
-            !contactsGranted -> toast(context, "Contacts permission is required.")
-            !smsGranted -> toast(context, "SMS permission is required.")
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            contactPicker.launch(buildContactPickerIntent())
+        } else {
+            toast(context, "Contacts permission is required to pick recipients.")
         }
     }
 
     fun launchPicker() {
-        if (hasPermissions(context)) {
+        if (hasContactsPermission(context)) {
             contactPicker.launch(buildContactPickerIntent())
         } else {
-            permissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.READ_CONTACTS,
-                    Manifest.permission.SEND_SMS
-                )
-            )
+            permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+        }
+    }
+
+    fun beginNativeHandoff() {
+        when {
+            message.isBlank() -> toast(context, "Enter a message first.")
+            recipients.isEmpty() -> toast(context, "Pick at least one contact.")
+            else -> {
+                handoffRecipients.clear()
+                handoffRecipients.addAll(recipients)
+                handoffMessage = message.trim()
+                handoffIndex = 0
+                stage = WrangleStage.HANDOFF
+            }
+        }
+    }
+
+    fun openNextThread() {
+        val recipient = handoffRecipients.getOrNull(handoffIndex) ?: return
+        val intent = buildSmsComposeIntent(recipient.phoneNumber, handoffMessage)
+
+        if (intent.resolveActivity(context.packageManager) == null) {
+            toast(context, "No SMS app available on this device.")
+            return
+        }
+
+        context.startActivity(intent)
+        handoffIndex += 1
+        if (handoffIndex >= handoffRecipients.size) {
+            stage = WrangleStage.COMPLETE
         }
     }
 
@@ -170,7 +177,7 @@ private fun WrangleTangleScreen(activity: MainActivity) {
                     Column {
                         Text("WrangleTangle Text")
                         Text(
-                            text = "Send one message to multiple people, individually",
+                            text = "Write once, then hand off each message to your SMS app privately",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -192,7 +199,7 @@ private fun WrangleTangleScreen(activity: MainActivity) {
                     item {
                         PrimaryCard(title = "Select Contacts") {
                             Text(
-                                text = "Pick the people who should get the same message, but in separate 1-on-1 SMS threads.",
+                                text = "Pick the people who should get the same message in separate 1-on-1 threads through your normal SMS app.",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(16.dp))
@@ -271,67 +278,102 @@ private fun WrangleTangleScreen(activity: MainActivity) {
                                 maxLines = 10,
                                 label = { Text("Write the text once") },
                                 supportingText = {
-                                    Text("WrangleTangle sends this to each person separately, never as a group chat.")
+                                    Text("WrangleTangle opens your SMS app one person at a time so you stay out of group chats.")
                                 }
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Button(
-                                    onClick = {
-                                        when {
-                                            message.isBlank() -> toast(context, "Enter a message first.")
-                                            recipients.isEmpty() -> toast(context, "Pick at least one contact.")
-                                            !hasSmsPermission(context) -> {
-                                                permissionLauncher.launch(
-                                                    arrayOf(
-                                                        Manifest.permission.READ_CONTACTS,
-                                                        Manifest.permission.SEND_SMS
-                                                    )
-                                                )
-                                            }
-                                            else -> {
-                                                isSending = true
-                                                scope.launch {
-                                                    activity.sendIndividualSms(
-                                                        message = message.trim(),
-                                                        recipients = recipients.map { it.phoneNumber }
-                                                    )
-                                                    lastSentMessage = message.trim()
-                                                    lastSentRecipients.clear()
-                                                    lastSentRecipients.addAll(recipients)
-                                                    isSending = false
-                                                    stage = WrangleStage.SENT
-                                                }
-                                            }
-                                        }
-                                    },
-                                    enabled = !isSending,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = TealAccent,
-                                        contentColor = Color.Black
-                                    )
-                                ) {
-                                    Icon(Icons.Outlined.Send, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        if (isSending) "Sending..." else "Send individually"
-                                    )
-                                }
+                            Button(
+                                onClick = ::beginNativeHandoff,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = TealAccent,
+                                    contentColor = Color.Black
+                                )
+                            ) {
+                                Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Open in SMS app")
                             }
                         }
                     }
                 }
 
-                WrangleStage.SENT -> {
+                WrangleStage.HANDOFF -> {
+                    val nextRecipient = handoffRecipients.getOrNull(handoffIndex)
+                    val openedCount = handoffIndex.coerceAtMost(handoffRecipients.size)
+
                     item {
-                        PrimaryCard(title = "Sent to ${lastSentRecipients.size} people") {
+                        PrimaryCard(title = "Native SMS Handoff") {
                             Text(
-                                text = "Each recipient got a normal 1-on-1 SMS from your number. Replies will come back in separate threads.",
+                                text = "WrangleTangle stays contacts-only. It opens your normal SMS app one recipient at a time with the message prefilled.",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                text = lastSentMessage,
+                                text = "Opened $openedCount of ${handoffRecipients.size}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            if (nextRecipient != null) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "Next up: ${nextRecipient.name}",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = nextRecipient.phoneNumber,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Tap the button below, send the message in your SMS app, then come back here for the next person.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Button(
+                                    onClick = ::openNextThread,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = TealAccent,
+                                        contentColor = Color.Black
+                                    )
+                                ) {
+                                    Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        if (nextRecipient == null) "Done" else "Open next thread"
+                                    )
+                                }
+                                OutlinedButton(onClick = { stage = WrangleStage.COMPOSE }) {
+                                    Text("Edit message")
+                                }
+                            }
+                        }
+                    }
+
+                    items(handoffRecipients, key = { it.phoneNumber }) { recipient ->
+                        RecipientStatusCard(
+                            recipient = recipient,
+                            status = when {
+                                handoffRecipients.indexOf(recipient) < handoffIndex -> "Opened in SMS app"
+                                recipient.phoneNumber == nextRecipient?.phoneNumber -> "Next"
+                                else -> "Queued"
+                            }
+                        )
+                    }
+                }
+
+                WrangleStage.COMPLETE -> {
+                    item {
+                        PrimaryCard(title = "Ready in your SMS app") {
+                            Text(
+                                text = "WrangleTangle opened ${handoffRecipients.size} private 1-on-1 compose screens through your normal messaging app.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = handoffMessage,
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Medium
                             )
@@ -341,6 +383,9 @@ private fun WrangleTangleScreen(activity: MainActivity) {
                                     onClick = {
                                         message = ""
                                         recipients.clear()
+                                        handoffRecipients.clear()
+                                        handoffMessage = ""
+                                        handoffIndex = 0
                                         stage = WrangleStage.PICK_RECIPIENTS
                                     },
                                     colors = ButtonDefaults.buttonColors(
@@ -350,15 +395,23 @@ private fun WrangleTangleScreen(activity: MainActivity) {
                                 ) {
                                     Text("Send another")
                                 }
-                                OutlinedButton(onClick = { stage = WrangleStage.COMPOSE }) {
-                                    Text("Edit message and resend")
+                                OutlinedButton(
+                                    onClick = {
+                                        handoffIndex = 0
+                                        stage = WrangleStage.HANDOFF
+                                    }
+                                ) {
+                                    Text("Open again")
                                 }
                             }
                         }
                     }
 
-                    items(lastSentRecipients, key = { it.phoneNumber }) { recipient ->
-                        RecipientCard(recipient = recipient)
+                    items(handoffRecipients, key = { it.phoneNumber }) { recipient ->
+                        RecipientStatusCard(
+                            recipient = recipient,
+                            status = "Opened in SMS app"
+                        )
                     }
                 }
             }
@@ -444,6 +497,51 @@ private fun RecipientCard(recipient: ContactRecipient) {
 }
 
 @Composable
+private fun RecipientStatusCard(
+    recipient: ContactRecipient,
+    status: String
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = recipient.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = recipient.phoneNumber,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(
+                    imageVector = Icons.Outlined.CheckCircle,
+                    contentDescription = null,
+                    tint = TealAccent
+                )
+                Text(
+                    text = status,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun WrangleTangleTheme(content: @Composable () -> Unit) {
     val colors = darkColorScheme(
         primary = TealAccent,
@@ -464,6 +562,13 @@ private fun WrangleTangleTheme(content: @Composable () -> Unit) {
 private fun buildContactPickerIntent(): Intent {
     return Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI).apply {
         putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+    }
+}
+
+private fun buildSmsComposeIntent(phoneNumber: String, message: String): Intent {
+    val destination = Uri.encode(phoneNumber)
+    return Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$destination")).apply {
+        putExtra("sms_body", message)
     }
 }
 
@@ -502,21 +607,10 @@ private fun resolveRecipient(context: Context, uri: Uri): ContactRecipient? {
     return null
 }
 
-private fun hasPermissions(context: Context): Boolean {
-    return hasContactsPermission(context) && hasSmsPermission(context)
-}
-
 private fun hasContactsPermission(context: Context): Boolean {
     return ContextCompat.checkSelfPermission(
         context,
         Manifest.permission.READ_CONTACTS
-    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-}
-
-private fun hasSmsPermission(context: Context): Boolean {
-    return ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.SEND_SMS
     ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 }
 

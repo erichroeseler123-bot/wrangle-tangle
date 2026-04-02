@@ -64,5 +64,6 @@ These are intentionally excluded from Git:
 
 - Namespace: `com.wrangletangle.text`
 - UI: Jetpack Compose, dark mode, teal accent
-- SMS sending uses individual `SmsManager.sendTextMessage()` calls, never a group thread
+- Permission model: `READ_CONTACTS` only
+- Sending uses native SMS handoff with `ACTION_SENDTO`, one recipient at a time, to avoid group threads without requesting direct SMS permission
 - Contact selection includes an `Add another` fallback for pickers that ignore `EXTRA_ALLOW_MULTIPLE`
