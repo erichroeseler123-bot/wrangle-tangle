@@ -1271,15 +1271,16 @@ private fun buildMessagingIntent(
     formattedMessage: String,
     imageUri: Uri?
 ): Intent {
+    val normalizedPhoneNumber = normalizePhoneNumber(recipient.phoneNumber)
     if (imageUri == null) {
-        return Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${Uri.encode(recipient.phoneNumber)}")).apply {
+        return Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${Uri.encode(normalizedPhoneNumber)}")).apply {
             putExtra("sms_body", formattedMessage)
         }
     }
 
     return Intent(Intent.ACTION_SEND).apply {
         type = "image/*"
-        putExtra("address", recipient.phoneNumber)
+        putExtra("address", normalizedPhoneNumber)
         putExtra("sms_body", formattedMessage)
         putExtra(Intent.EXTRA_STREAM, imageUri)
         clipData = ClipData.newUri(context.contentResolver, "message-image", imageUri)
@@ -1312,6 +1313,19 @@ private fun applyPersonalization(
     recipient: ContactRecipient
 ): String {
     return text.replace("::firstname::", recipient.name.substringBefore(" ").trim())
+}
+
+private fun normalizePhoneNumber(phoneNumber: String): String {
+    val trimmed = phoneNumber.trim()
+    if (trimmed.isBlank()) return trimmed
+
+    val hasLeadingPlus = trimmed.startsWith("+")
+    val digitsOnly = trimmed.filter(Char::isDigit)
+    return when {
+        digitsOnly.isBlank() -> trimmed
+        hasLeadingPlus -> "+$digitsOnly"
+        else -> digitsOnly
+    }
 }
 
 private fun extractRecipientsFromIntent(context: Context, data: Intent?): List<ContactRecipient> {
