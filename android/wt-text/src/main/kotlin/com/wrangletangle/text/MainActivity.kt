@@ -8,7 +8,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
-import android.telephony.TelephonyManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -179,6 +178,7 @@ private fun WrangleTangleScreen() {
     var editorGroupId by remember { mutableStateOf<String?>(null) }
     var editorGroupName by remember { mutableStateOf("") }
     var showCanvaHelp by remember { mutableStateOf(false) }
+    var testPhoneNumber by remember { mutableStateOf(loadTestPhoneNumber(context)) }
     val groups = remember { mutableStateListOf<SavedGroup>().apply { addAll(loadGroups(context)) } }
     val quickRecipients = remember { mutableStateListOf<ContactRecipient>() }
     val editorRecipients = remember { mutableStateListOf<ContactRecipient>() }
@@ -279,6 +279,10 @@ private fun WrangleTangleScreen() {
         }
     }
 
+    fun persistTestPhoneNumber() {
+        saveTestPhoneNumber(context, testPhoneNumber)
+    }
+
     fun deleteSelectedGroup() {
         val groupId = selectedGroupId ?: return
         groups.removeAll { it.id == groupId }
@@ -350,9 +354,9 @@ private fun WrangleTangleScreen() {
         when {
             headline.isBlank() && body.isBlank() -> toast(context, "Add a headline or body first.")
             else -> {
-                val selfNumber = resolveDevicePhoneNumber(context)
-                if (selfNumber.isNullOrBlank()) {
-                    toast(context, "Could not find this device's phone number.")
+                val selfNumber = testPhoneNumber.trim()
+                if (selfNumber.isBlank()) {
+                    toast(context, "Enter your test number first.")
                     return
                 }
 
@@ -363,6 +367,7 @@ private fun WrangleTangleScreen() {
                     body = body
                 )
                 val intent = buildMessagingIntent(
+                    context = context,
                     recipient = selfRecipient,
                     formattedMessage = formattedMessage,
                     imageUri = selectedImageUri
@@ -373,7 +378,12 @@ private fun WrangleTangleScreen() {
                     return
                 }
 
-                context.startActivity(intent)
+                runCatching {
+                    context.startActivity(intent)
+                    toast(context, "Test message opened. Tap Send in your messaging app.")
+                }.onFailure {
+                    toast(context, "Could not open your messaging app for the test send.")
+                }
             }
         }
     }
@@ -386,6 +396,7 @@ private fun WrangleTangleScreen() {
             body = body
         )
         val intent = buildMessagingIntent(
+            context = context,
             recipient = recipient,
             formattedMessage = formattedMessage,
             imageUri = selectedImageUri
@@ -396,7 +407,13 @@ private fun WrangleTangleScreen() {
             return
         }
 
-        context.startActivity(intent)
+        runCatching {
+            context.startActivity(intent)
+            toast(context, "Message opened for ${recipient.name}. Tap Send in your messaging app.")
+        }.onFailure {
+                toast(context, "Could not open your messaging app for this recipient.")
+                return
+            }
         handoffIndex += 1
         if (handoffIndex >= handoffRecipients.size) {
             screen = WrangleScreen.COMPLETE
@@ -725,6 +742,23 @@ private fun WrangleTangleScreen() {
                     }
 
                     item {
+                        PrimaryCard(title = "My Test Number") {
+                            OutlinedTextField(
+                                value = testPhoneNumber,
+                                onValueChange = {
+                                    testPhoneNumber = it
+                                    persistTestPhoneNumber()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Phone number for test sends") },
+                                supportingText = {
+                                    Text("Saved on this device and used by Test Send to Myself.")
+                                }
+                            )
+                        }
+                    }
+
+                    item {
                         PrimaryCard(title = "Image") {
                             Text(
                                 text = "Optional hero image. This tries to hand off as MMS when your messaging app supports it.",
@@ -817,7 +851,7 @@ private fun WrangleTangleScreen() {
                             ) {
                                 Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Send to ${composeRecipients.size} people")
+                                Text("Open first message for ${composeRecipients.size} people")
                             }
 
                             OutlinedButton(
@@ -826,7 +860,7 @@ private fun WrangleTangleScreen() {
                             ) {
                                 Icon(Icons.Outlined.PhoneAndroid, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Test Send to Myself")
+                                Text("Open Test Message to Myself")
                             }
                         }
                     }
@@ -839,7 +873,7 @@ private fun WrangleTangleScreen() {
                     item {
                         PrimaryCard(title = "Private SMS Handoff") {
                             Text(
-                                text = "WrangleTangle opens your messaging app one recipient at a time with the formatted message prefilled.",
+                                text = "WrangleTangle opens your messaging app one recipient at a time with the formatted message prefilled. You still need to tap Send in your messaging app.",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(16.dp))
@@ -1232,6 +1266,7 @@ private fun buildContactPickerIntent(): Intent {
 }
 
 private fun buildMessagingIntent(
+    context: Context,
     recipient: ContactRecipient,
     formattedMessage: String,
     imageUri: Uri?
@@ -1247,7 +1282,7 @@ private fun buildMessagingIntent(
         putExtra("address", recipient.phoneNumber)
         putExtra("sms_body", formattedMessage)
         putExtra(Intent.EXTRA_STREAM, imageUri)
-        clipData = ClipData.newUri(null, "message-image", imageUri)
+        clipData = ClipData.newUri(context.contentResolver, "message-image", imageUri)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
 }
@@ -1321,12 +1356,6 @@ private fun hasContactsPermission(context: Context): Boolean {
     ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 }
 
-private fun resolveDevicePhoneNumber(context: Context): String? {
-    val telephonyManager = context.getSystemService(TelephonyManager::class.java) ?: return null
-    @Suppress("DEPRECATION")
-    return telephonyManager.line1Number?.trim()?.takeIf { it.isNotBlank() }
-}
-
 private fun loadGroups(context: Context): List<SavedGroup> {
     val raw = context
         .getSharedPreferences("wt_text_groups", Context.MODE_PRIVATE)
@@ -1362,6 +1391,21 @@ private fun loadGroups(context: Context): List<SavedGroup> {
             }
         }
     }.getOrDefault(emptyList())
+}
+
+private fun loadTestPhoneNumber(context: Context): String {
+    return context
+        .getSharedPreferences("wt_text_groups", Context.MODE_PRIVATE)
+        .getString("test_phone_number", "")
+        .orEmpty()
+}
+
+private fun saveTestPhoneNumber(context: Context, phoneNumber: String) {
+    context
+        .getSharedPreferences("wt_text_groups", Context.MODE_PRIVATE)
+        .edit()
+        .putString("test_phone_number", phoneNumber)
+        .apply()
 }
 
 private fun saveGroups(
