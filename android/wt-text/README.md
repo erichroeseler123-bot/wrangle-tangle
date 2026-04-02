@@ -67,6 +67,7 @@ These are intentionally excluded from Git:
 - Saved Groups: reusable local recipient lists stored on-device with names, display names, and phone numbers
 - Permission model: `READ_CONTACTS` only
 - Sending uses native SMS handoff with `ACTION_SENDTO`, one recipient at a time, to avoid group threads without requesting direct SMS permission
+- Recipient experience: recipients do not need `WT Text`; they receive a normal 1-on-1 text or MMS in their existing messaging app and can reply normally
 - Compose flow: headline + body + optional hero image + style presets + live preview
 - Personalization: supports `::firstname::` in the body preview and outgoing text
 - Image handoff: attempts MMS/share-based handoff when a photo is attached, which depends on the device's messaging app support
