@@ -456,20 +456,47 @@
         <article class="app-card">
           <div class="app-head">
             <div class="app-icon secondary">GPS</div>
-            <span class="badge pending">Coming next</span>
+            <span class="badge">Live now</span>
           </div>
           <h2>WT-GPS Share</h2>
           <p class="app-copy">
-            Placeholder slot for the next package. When you are ready, add its APK
-            into <strong>/downloads</strong> and update this card with the new file
-            name.
+            Grab your current location and send it to multiple people individually
+            by SMS. Useful when you need everyone to get the same location update,
+            but still want replies to come back privately.
           </p>
           <div class="meta">
-            <span class="pill">Reserved release lane</span>
-            <span class="pill">Ready for second app</span>
+            <span class="pill">Android APK</span>
+            <span class="pill">Signed release build</span>
+            <span class="pill">Current location by SMS</span>
           </div>
           <div class="actions">
-            <span class="button-muted" aria-disabled="true">APK pending upload</span>
+            <a class="button" href="/downloads/wt-gps-share.apk">Download APK</a>
+            <a class="button-muted" href="/downloads/index.html">Install guide</a>
+          </div>
+          <div class="phone-tools">
+            <h3>Or send it to your phone</h3>
+            <p>Scan the QR code to open the download directly on your Android device, or copy the link and send it to yourself.</p>
+            <div class="actions" style="margin-top: 14px">
+              <button class="button-muted" type="button" data-qr-toggle-gps>Scan to download</button>
+              <button class="button-muted" type="button" data-copy-link-gps>Copy link</button>
+            </div>
+            <div class="qr-panel" data-qr-panel-gps aria-live="polite">
+              <div class="qr-wrap">
+                <div class="qr-card">
+                  <img
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https%3A%2F%2Fwrangletangle.com%2Fdownloads%2Fwt-gps-share.apk"
+                    alt="QR code for downloading WT-GPS Share on your phone"
+                  />
+                </div>
+                <div>
+                  <p>Open your camera and scan this code to download WT-GPS Share directly on your Android device.</p>
+                  <div class="link-chip">https://wrangletangle.com/downloads/wt-gps-share.apk</div>
+                  <div class="install-note">
+                    After download, tap the file to install. If Android shows a warning because this app is not from the Play Store, that is normal for independent apps. Continue installation if you trust the source.
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </article>
       </section>
@@ -487,35 +514,50 @@
     </main>
     <script>
       (function () {
-        const apkUrl = "https://wrangletangle.com/downloads/wt-text.apk";
-        const qrToggle = document.querySelector("[data-qr-toggle]");
-        const qrPanel = document.querySelector("[data-qr-panel]");
-        const copyButton = document.querySelector("[data-copy-link]");
+        function wirePhoneTools(config) {
+          const qrToggle = document.querySelector(config.toggleSelector);
+          const qrPanel = document.querySelector(config.panelSelector);
+          const copyButton = document.querySelector(config.copySelector);
 
-        if (qrToggle && qrPanel) {
-          qrToggle.addEventListener("click", function () {
-            const isOpen = qrPanel.getAttribute("data-open") === "true";
-            qrPanel.setAttribute("data-open", String(!isOpen));
-            qrToggle.textContent = isOpen ? "Scan to download" : "Hide QR code";
-          });
+          if (qrToggle && qrPanel) {
+            qrToggle.addEventListener("click", function () {
+              const isOpen = qrPanel.getAttribute("data-open") === "true";
+              qrPanel.setAttribute("data-open", String(!isOpen));
+              qrToggle.textContent = isOpen ? "Scan to download" : "Hide QR code";
+            });
+          }
+
+          if (copyButton) {
+            copyButton.addEventListener("click", async function () {
+              try {
+                await navigator.clipboard.writeText(config.url);
+                copyButton.textContent = "Link copied";
+                window.setTimeout(function () {
+                  copyButton.textContent = "Copy link";
+                }, 1800);
+              } catch (error) {
+                copyButton.textContent = "Copy failed";
+                window.setTimeout(function () {
+                  copyButton.textContent = "Copy link";
+                }, 1800);
+              }
+            });
+          }
         }
 
-        if (copyButton) {
-          copyButton.addEventListener("click", async function () {
-            try {
-              await navigator.clipboard.writeText(apkUrl);
-              copyButton.textContent = "Link copied";
-              window.setTimeout(function () {
-                copyButton.textContent = "Copy link";
-              }, 1800);
-            } catch (error) {
-              copyButton.textContent = "Copy failed";
-              window.setTimeout(function () {
-                copyButton.textContent = "Copy link";
-              }, 1800);
-            }
-          });
-        }
+        wirePhoneTools({
+          url: "https://wrangletangle.com/downloads/wt-text.apk",
+          toggleSelector: "[data-qr-toggle]",
+          panelSelector: "[data-qr-panel]",
+          copySelector: "[data-copy-link]"
+        });
+
+        wirePhoneTools({
+          url: "https://wrangletangle.com/downloads/wt-gps-share.apk",
+          toggleSelector: "[data-qr-toggle-gps]",
+          panelSelector: "[data-qr-panel-gps]",
+          copySelector: "[data-copy-link-gps]"
+        });
       })();
     </script>
   </body>

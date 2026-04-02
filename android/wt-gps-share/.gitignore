@@ -1,0 +1,8 @@
+.gradle/
+.gradle-wrapper/
+.kotlin/
+build/
+dist/
+local.properties
+signing.properties
+*.hprof

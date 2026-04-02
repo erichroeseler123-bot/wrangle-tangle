@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+GRADLE_VERSION="9.3.1"
+WRAPPER_ROOT="${PWD}/.gradle-wrapper"
+DIST_DIR="${WRAPPER_ROOT}/gradle-${GRADLE_VERSION}"
+ZIP_PATH="${WRAPPER_ROOT}/gradle-${GRADLE_VERSION}-bin.zip"
+GRADLE_BIN="${DIST_DIR}/bin/gradle"
+
+if ! command -v java >/dev/null 2>&1; then
+  echo "Java 17+ is required before running this build." >&2
+  echo "Install it first, then rerun ./gradlew." >&2
+  exit 1
+fi
+
+mkdir -p "${WRAPPER_ROOT}"
+
+if [ ! -x "${GRADLE_BIN}" ]; then
+  if [ ! -f "${ZIP_PATH}" ]; then
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -o "${ZIP_PATH}"
+    elif command -v wget >/dev/null 2>&1; then
+      wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -O "${ZIP_PATH}"
+    else
+      echo "curl or wget is required to bootstrap Gradle." >&2
+      exit 1
+    fi
+  fi
+
+  rm -rf "${DIST_DIR}"
+  unzip -q "${ZIP_PATH}" -d "${WRAPPER_ROOT}"
+fi
+
+exec "${GRADLE_BIN}" "$@"
