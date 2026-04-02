@@ -1,9 +1,32 @@
 import org.gradle.api.tasks.Copy
+import java.util.Properties
 
 plugins {
     id("com.android.application") version "9.1.0"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.10"
 }
+
+val signingProperties = Properties().apply {
+    val signingFile = layout.projectDirectory.file("signing.properties").asFile
+    if (signingFile.exists()) {
+        signingFile.inputStream().use(::load)
+    }
+}
+
+fun signingValue(name: String): String? {
+    return providers.environmentVariable(name).orNull
+        ?: signingProperties.getProperty(name)
+}
+
+val releaseStoreFile = signingValue("WT_RELEASE_STORE_FILE")
+val releaseStorePassword = signingValue("WT_RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = signingValue("WT_RELEASE_KEY_ALIAS")
+val releaseKeyPassword = signingValue("WT_RELEASE_KEY_PASSWORD")
+val hasReleaseSigning =
+    !releaseStoreFile.isNullOrBlank() &&
+        !releaseStorePassword.isNullOrBlank() &&
+        !releaseKeyAlias.isNullOrBlank() &&
+        !releaseKeyPassword.isNullOrBlank()
 
 android {
     namespace = "com.wrangletangle.text"
@@ -17,6 +40,17 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
@@ -24,6 +58,9 @@ android {
 
         release {
             isMinifyEnabled = false
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -79,11 +116,11 @@ dependencies {
 }
 
 val copyApkToDist = tasks.register<Copy>("copyApkToDist") {
-    from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
+    from(layout.buildDirectory.file("outputs/apk/release/app-release.apk"))
     into(layout.projectDirectory.dir("dist"))
     rename { "wt-text.apk" }
 }
 
-tasks.matching { it.name == "assembleDebug" }.configureEach {
+tasks.matching { it.name == "assembleRelease" }.configureEach {
     finalizedBy(copyApkToDist)
 }

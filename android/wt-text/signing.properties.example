@@ -1,0 +1,4 @@
+WT_RELEASE_STORE_FILE=/home/your-user/.android/wt-text/release-keystore.jks
+WT_RELEASE_STORE_PASSWORD=replace-me
+WT_RELEASE_KEY_ALIAS=wrangletangle-release
+WT_RELEASE_KEY_PASSWORD=replace-me
