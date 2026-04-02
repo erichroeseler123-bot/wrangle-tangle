@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
@@ -48,6 +49,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -174,6 +176,7 @@ private fun WrangleTangleScreen() {
     var selectedGroupId by remember { mutableStateOf<String?>(null) }
     var editorGroupId by remember { mutableStateOf<String?>(null) }
     var editorGroupName by remember { mutableStateOf("") }
+    var showCanvaHelp by remember { mutableStateOf(false) }
     val groups = remember { mutableStateListOf<SavedGroup>().apply { addAll(loadGroups(context)) } }
     val quickRecipients = remember { mutableStateListOf<ContactRecipient>() }
     val editorRecipients = remember { mutableStateListOf<ContactRecipient>() }
@@ -366,6 +369,15 @@ private fun WrangleTangleScreen() {
         }
     }
 
+    fun openCanvaOrExplain() {
+        val canvaIntent = context.packageManager.getLaunchIntentForPackage("com.canva.editor")
+        if (canvaIntent != null) {
+            context.startActivity(canvaIntent)
+        } else {
+            toast(context, "Canva is not installed. Use the helper steps below.")
+        }
+    }
+
     val sampleRecipient = composeRecipients.firstOrNull()
         ?: handoffRecipients.firstOrNull()
         ?: ContactRecipient(name = "Sarah", phoneNumber = "(555) 555-5555")
@@ -386,6 +398,56 @@ private fun WrangleTangleScreen() {
         WrangleScreen.COMPOSE -> "Build a better-looking message without turning this into a design app"
         WrangleScreen.HANDOFF -> "Open one private compose screen at a time in your messaging app"
         WrangleScreen.COMPLETE -> "Each compose screen was opened separately in your messaging app"
+    }
+
+    if (showCanvaHelp) {
+        ModalBottomSheet(
+            onDismissRequest = { showCanvaHelp = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = "From Canva",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Best lightweight flow right now:",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text("1. Build your image in Canva.")
+                Text("2. Save or export it to your phone.")
+                Text("3. Come back here and tap Add Photo.")
+                Text(
+                    text = "Recipients do not need Canva. They just receive the image in a normal text or MMS.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = {
+                            openCanvaOrExplain()
+                            showCanvaHelp = false
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = TealAccent,
+                            contentColor = Color.Black
+                        )
+                    ) {
+                        Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Open Canva")
+                    }
+                    OutlinedButton(onClick = { showCanvaHelp = false }) {
+                        Text("Close")
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
     }
 
     Scaffold(
@@ -647,6 +709,11 @@ private fun WrangleTangleScreen() {
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(if (selectedImageUri == null) "Add Photo" else "Change Photo")
                                 }
+                                OutlinedButton(onClick = { showCanvaHelp = true }) {
+                                    Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("From Canva")
+                                }
                                 if (selectedImageUri != null) {
                                     OutlinedButton(onClick = { selectedImageUri = null }) {
                                         Icon(Icons.Outlined.Delete, contentDescription = null)
@@ -664,6 +731,12 @@ private fun WrangleTangleScreen() {
                                         .fillMaxWidth()
                                         .height(180.dp),
                                     contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.height(14.dp))
+                                Text(
+                                    text = "Want to style the image first? Tap From Canva, export to your phone, then attach it here.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
