@@ -356,9 +356,10 @@ private fun WrangleTangleScreen() {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Button(
                                     onClick = { launchPicker(PickerTarget.QUICK_SEND) },
+                                    modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = TealAccent,
                                         contentColor = Color.Black
@@ -368,7 +369,10 @@ private fun WrangleTangleScreen() {
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("New Message")
                                 }
-                                OutlinedButton(onClick = { openGroupEditor(null) }) {
+                                OutlinedButton(
+                                    onClick = { openGroupEditor(null) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
                                     Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, contentDescription = null)
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("New Group")
