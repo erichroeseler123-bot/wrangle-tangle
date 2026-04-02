@@ -17,11 +17,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,12 +31,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -49,6 +54,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -57,10 +63,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val TealAccent = Color(0xFF2DD4BF)
 private val DarkSurface = Color(0xFF071613)
 private val DarkBackground = Color(0xFF03110F)
+
+private enum class WrangleStage {
+    PICK_RECIPIENTS,
+    COMPOSE,
+    SENT
+}
 
 data class ContactRecipient(
     val name: String,
@@ -85,10 +99,13 @@ class MainActivity : ComponentActivity() {
     }
 
     // The "WrangleTangle" Loop
-    fun sendIndividualSms(message: String, recipients: List<String>) {
+    suspend fun sendIndividualSms(message: String, recipients: List<String>) {
         val smsManager = getSystemService(SmsManager::class.java)
-        recipients.forEach { number ->
+        recipients.forEachIndexed { index, number ->
             smsManager.sendTextMessage(number, null, message, null, null)
+            if (index != recipients.lastIndex) {
+                delay(180)
+            }
         }
     }
 }
@@ -97,8 +114,13 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun WrangleTangleScreen(activity: MainActivity) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var stage by remember { mutableStateOf(WrangleStage.PICK_RECIPIENTS) }
     var message by remember { mutableStateOf("") }
+    var lastSentMessage by remember { mutableStateOf("") }
+    var isSending by remember { mutableStateOf(false) }
     val recipients = remember { mutableStateListOf<ContactRecipient>() }
+    val lastSentRecipients = remember { mutableStateListOf<ContactRecipient>() }
 
     val contactPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -109,6 +131,9 @@ private fun WrangleTangleScreen(activity: MainActivity) {
                 recipients.any { existing -> existing.phoneNumber == candidate.phoneNumber }
             }
             recipients.addAll(newRecipients)
+            if (recipients.isNotEmpty() && stage == WrangleStage.PICK_RECIPIENTS) {
+                stage = WrangleStage.COMPOSE
+            }
         }
     }
 
@@ -125,7 +150,7 @@ private fun WrangleTangleScreen(activity: MainActivity) {
         }
     }
 
-    fun launchPickerWithFallback() {
+    fun launchPicker() {
         if (hasPermissions(context)) {
             contactPicker.launch(buildContactPickerIntent())
         } else {
@@ -145,7 +170,7 @@ private fun WrangleTangleScreen(activity: MainActivity) {
                     Column {
                         Text("WrangleTangle Text")
                         Text(
-                            text = "Individual 1-on-1 SMS sender",
+                            text = "Send one message to multiple people, individually",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -162,114 +187,229 @@ private fun WrangleTangleScreen(activity: MainActivity) {
             contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text(
-                            text = "Message",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-
-                        OutlinedTextField(
-                            value = message,
-                            onValueChange = { message = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 6,
-                            maxLines = 10,
-                            label = { Text("Type the message to send") },
-                            supportingText = {
-                                Text("Each contact receives a separate SMS thread. On older phones, use Add another after each pick.")
-                            }
-                        )
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(
-                                onClick = ::launchPickerWithFallback
-                            ) {
-                                Icon(Icons.Outlined.People, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Pick contacts")
-                            }
-
-                            if (recipients.isNotEmpty()) {
-                                OutlinedButton(onClick = ::launchPickerWithFallback) {
-                                    Text("Add another")
-                                }
-                            }
-
+            when (stage) {
+                WrangleStage.PICK_RECIPIENTS -> {
+                    item {
+                        PrimaryCard(title = "Select Contacts") {
+                            Text(
+                                text = "Pick the people who should get the same message, but in separate 1-on-1 SMS threads.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
                             Button(
-                                onClick = {
-                                    when {
-                                        message.isBlank() -> toast(context, "Enter a message first.")
-                                        recipients.isEmpty() -> toast(context, "Pick at least one contact.")
-                                        !hasSmsPermission(context) -> {
-                                            permissionLauncher.launch(
-                                                arrayOf(
-                                                    Manifest.permission.READ_CONTACTS,
-                                                    Manifest.permission.SEND_SMS
-                                                )
-                                            )
-                                        }
-                                        else -> {
-                                            activity.sendIndividualSms(
-                                                message = message.trim(),
-                                                recipients = recipients.map { it.phoneNumber }
-                                            )
-                                            toast(
-                                                context,
-                                                "Sent ${recipients.size} individual SMS messages."
-                                            )
-                                        }
-                                    }
-                                },
+                                onClick = ::launchPicker,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = TealAccent,
                                     contentColor = Color.Black
                                 )
                             ) {
-                                Icon(Icons.Outlined.CheckCircle, contentDescription = null)
+                                Icon(Icons.Outlined.People, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Send to ${recipients.size} recipient${if (recipients.size == 1) "" else "s"}")
+                                Text("Select Contacts")
+                            }
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = "On phones that do not support multi-select, pick one contact and then tap Add another.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    if (recipients.isNotEmpty()) {
+                        item {
+                            StageFooterCard(
+                                text = "${recipients.size} recipient${if (recipients.size == 1) "" else "s"} selected"
+                            ) {
+                                stage = WrangleStage.COMPOSE
+                            }
+                        }
+                        items(recipients, key = { it.phoneNumber }) { recipient ->
+                            RecipientCard(recipient = recipient)
+                        }
+                    }
+                }
+
+                WrangleStage.COMPOSE -> {
+                    item {
+                        PrimaryCard(title = "To") {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                recipients.forEach { recipient ->
+                                    FilterChip(
+                                        selected = true,
+                                        onClick = {},
+                                        label = { Text(recipient.name) }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                OutlinedButton(onClick = ::launchPicker) {
+                                    Icon(Icons.Outlined.People, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(if (recipients.isEmpty()) "Add People" else "Add another")
+                                }
+                                OutlinedButton(onClick = { stage = WrangleStage.PICK_RECIPIENTS }) {
+                                    Icon(Icons.Outlined.Edit, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Edit recipients")
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        PrimaryCard(title = "Message") {
+                            OutlinedTextField(
+                                value = message,
+                                onValueChange = { message = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 6,
+                                maxLines = 10,
+                                label = { Text("Write the text once") },
+                                supportingText = {
+                                    Text("WrangleTangle sends this to each person separately, never as a group chat.")
+                                }
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Button(
+                                    onClick = {
+                                        when {
+                                            message.isBlank() -> toast(context, "Enter a message first.")
+                                            recipients.isEmpty() -> toast(context, "Pick at least one contact.")
+                                            !hasSmsPermission(context) -> {
+                                                permissionLauncher.launch(
+                                                    arrayOf(
+                                                        Manifest.permission.READ_CONTACTS,
+                                                        Manifest.permission.SEND_SMS
+                                                    )
+                                                )
+                                            }
+                                            else -> {
+                                                isSending = true
+                                                scope.launch {
+                                                    activity.sendIndividualSms(
+                                                        message = message.trim(),
+                                                        recipients = recipients.map { it.phoneNumber }
+                                                    )
+                                                    lastSentMessage = message.trim()
+                                                    lastSentRecipients.clear()
+                                                    lastSentRecipients.addAll(recipients)
+                                                    isSending = false
+                                                    stage = WrangleStage.SENT
+                                                }
+                                            }
+                                        }
+                                    },
+                                    enabled = !isSending,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = TealAccent,
+                                        contentColor = Color.Black
+                                    )
+                                ) {
+                                    Icon(Icons.Outlined.Send, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        if (isSending) "Sending..." else "Send individually"
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            item {
-                Text(
-                    text = "Recipients",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
+                WrangleStage.SENT -> {
+                    item {
+                        PrimaryCard(title = "Sent to ${lastSentRecipients.size} people") {
+                            Text(
+                                text = "Each recipient got a normal 1-on-1 SMS from your number. Replies will come back in separate threads.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = lastSentMessage,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Button(
+                                    onClick = {
+                                        message = ""
+                                        recipients.clear()
+                                        stage = WrangleStage.PICK_RECIPIENTS
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = TealAccent,
+                                        contentColor = Color.Black
+                                    )
+                                ) {
+                                    Text("Send another")
+                                }
+                                OutlinedButton(onClick = { stage = WrangleStage.COMPOSE }) {
+                                    Text("Edit message and resend")
+                                }
+                            }
+                        }
+                    }
 
-            if (recipients.isEmpty()) {
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        shape = RoundedCornerShape(20.dp)
-                    ) {
-                        Text(
-                            text = "No contacts selected yet. Tap Pick contacts to add recipients.",
-                            modifier = Modifier.padding(18.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    items(lastSentRecipients, key = { it.phoneNumber }) { recipient ->
+                        RecipientCard(recipient = recipient)
                     }
                 }
-            } else {
-                items(recipients, key = { it.phoneNumber }) { recipient ->
-                    RecipientCard(recipient = recipient)
-                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PrimaryCard(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            content()
+        }
+    }
+}
+
+@Composable
+private fun StageFooterCard(
+    text: String,
+    onContinue: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(text = text, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = onContinue) {
+                Text("Compose message")
             }
         }
     }
