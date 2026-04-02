@@ -2,6 +2,7 @@ package com.wrangletangle.text
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -25,17 +26,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
+import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -61,11 +64,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import coil3.compose.AsyncImage
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -86,6 +91,43 @@ private enum class WrangleScreen {
 private enum class PickerTarget {
     QUICK_SEND,
     GROUP_EDITOR
+}
+
+private enum class MessageStylePreset(
+    val label: String,
+    val headlineColor: Color,
+    val bodyColor: Color,
+    val cardColor: Color,
+    val borderColor: Color
+) {
+    CLEAN(
+        label = "Clean",
+        headlineColor = Color(0xFFF8F7F2),
+        bodyColor = Color(0xFFC7D1CC),
+        cardColor = Color(0xFF10211D),
+        borderColor = Color(0x332DD4BF)
+    ),
+    LOUD(
+        label = "Loud",
+        headlineColor = Color(0xFFFFF4D1),
+        bodyColor = Color(0xFFFFDAB2),
+        cardColor = Color(0xFF3A1500),
+        borderColor = Color(0x66FF8C42)
+    ),
+    NIGHT(
+        label = "Night",
+        headlineColor = Color(0xFFF8F7F2),
+        bodyColor = Color(0xFFB8BBFF),
+        cardColor = Color(0xFF11142B),
+        borderColor = Color(0x664D6BFF)
+    ),
+    FLYER(
+        label = "Flyer",
+        headlineColor = Color(0xFF101010),
+        bodyColor = Color(0xFF252525),
+        cardColor = Color(0xFFFFD54A),
+        borderColor = Color(0x66FFF0A0)
+    )
 }
 
 data class ContactRecipient(
@@ -124,8 +166,10 @@ private fun WrangleTangleScreen() {
     var screen by remember { mutableStateOf(WrangleScreen.HOME) }
     var pickerTarget by remember { mutableStateOf(PickerTarget.QUICK_SEND) }
     var composeTitle by remember { mutableStateOf("Quick Send") }
-    var message by remember { mutableStateOf("") }
-    var handoffMessage by remember { mutableStateOf("") }
+    var headline by remember { mutableStateOf("") }
+    var body by remember { mutableStateOf("") }
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedStyle by remember { mutableStateOf(MessageStylePreset.CLEAN) }
     var handoffIndex by remember { mutableStateOf(0) }
     var selectedGroupId by remember { mutableStateOf<String?>(null) }
     var editorGroupId by remember { mutableStateOf<String?>(null) }
@@ -154,21 +198,27 @@ private fun WrangleTangleScreen() {
         destination.addAll(newRecipients)
     }
 
+    fun resetComposeDraft() {
+        headline = ""
+        body = ""
+        selectedImageUri = null
+        selectedStyle = MessageStylePreset.CLEAN
+        handoffIndex = 0
+        handoffRecipients.clear()
+    }
+
     fun goHome() {
         screen = WrangleScreen.HOME
-        message = ""
-        handoffMessage = ""
-        handoffIndex = 0
         composeTitle = "Quick Send"
         quickRecipients.clear()
         composeRecipients.clear()
-        handoffRecipients.clear()
         selectedGroupId = null
+        resetComposeDraft()
     }
 
     fun startQuickSend() {
         composeTitle = "Quick Send"
-        message = ""
+        resetComposeDraft()
         composeRecipients.clear()
         composeRecipients.addAll(quickRecipients)
         screen = if (quickRecipients.isEmpty()) WrangleScreen.HOME else WrangleScreen.COMPOSE
@@ -188,16 +238,13 @@ private fun WrangleTangleScreen() {
         screen = WrangleScreen.GROUP_DETAIL
     }
 
-    fun beginCompose(
-        title: String,
-        recipients: List<ContactRecipient>
-    ) {
+    fun beginCompose(title: String, recipients: List<ContactRecipient>) {
         if (recipients.isEmpty()) {
             toast(context, "Pick at least one contact.")
             return
         }
         composeTitle = title
-        message = ""
+        resetComposeDraft()
         composeRecipients.clear()
         composeRecipients.addAll(recipients)
         screen = WrangleScreen.COMPOSE
@@ -256,6 +303,12 @@ private fun WrangleTangleScreen() {
         }
     }
 
+    val imagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        selectedImageUri = uri
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -277,12 +330,11 @@ private fun WrangleTangleScreen() {
 
     fun beginNativeHandoff() {
         when {
-            message.isBlank() -> toast(context, "Enter a message first.")
+            headline.isBlank() && body.isBlank() -> toast(context, "Add a headline or body first.")
             composeRecipients.isEmpty() -> toast(context, "Pick at least one contact.")
             else -> {
                 handoffRecipients.clear()
                 handoffRecipients.addAll(composeRecipients)
-                handoffMessage = message.trim()
                 handoffIndex = 0
                 screen = WrangleScreen.HANDOFF
             }
@@ -291,10 +343,19 @@ private fun WrangleTangleScreen() {
 
     fun openNextThread() {
         val recipient = handoffRecipients.getOrNull(handoffIndex) ?: return
-        val intent = buildSmsComposeIntent(recipient.phoneNumber, handoffMessage)
+        val formattedMessage = buildFormattedMessage(
+            recipient = recipient,
+            headline = headline,
+            body = body
+        )
+        val intent = buildMessagingIntent(
+            recipient = recipient,
+            formattedMessage = formattedMessage,
+            imageUri = selectedImageUri
+        )
 
         if (intent.resolveActivity(context.packageManager) == null) {
-            toast(context, "No SMS app available on this device.")
+            toast(context, "No messaging app available on this device.")
             return
         }
 
@@ -305,22 +366,26 @@ private fun WrangleTangleScreen() {
         }
     }
 
+    val sampleRecipient = composeRecipients.firstOrNull()
+        ?: handoffRecipients.firstOrNull()
+        ?: ContactRecipient(name = "Sarah", phoneNumber = "(555) 555-5555")
+
     val screenTitle = when (screen) {
         WrangleScreen.HOME -> "WrangleTangle Text"
         WrangleScreen.GROUP_EDITOR -> if (editorGroupId == null) "New Group" else "Edit Group"
         WrangleScreen.GROUP_DETAIL -> selectedGroup()?.name ?: "Group"
         WrangleScreen.COMPOSE -> composeTitle
         WrangleScreen.HANDOFF -> "Private SMS Handoff"
-        WrangleScreen.COMPLETE -> "Ready in SMS App"
+        WrangleScreen.COMPLETE -> "Ready in Messages"
     }
 
     val screenSubtitle = when (screen) {
         WrangleScreen.HOME -> "Create named groups and send one message privately to everyone in them"
         WrangleScreen.GROUP_EDITOR -> "Saved groups are reusable recipient lists, not group chats"
         WrangleScreen.GROUP_DETAIL -> "Each person in this group gets their own private text"
-        WrangleScreen.COMPOSE -> "Write once. Open private SMS threads one by one."
-        WrangleScreen.HANDOFF -> "Use your normal SMS app without turning this into a group thread"
-        WrangleScreen.COMPLETE -> "Each compose screen was opened separately in your SMS app"
+        WrangleScreen.COMPOSE -> "Build a better-looking message without turning this into a design app"
+        WrangleScreen.HANDOFF -> "Open one private compose screen at a time in your messaging app"
+        WrangleScreen.COMPLETE -> "Each compose screen was opened separately in your messaging app"
     }
 
     Scaffold(
@@ -356,9 +421,10 @@ private fun WrangleTangleScreen() {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Button(
                                     onClick = { launchPicker(PickerTarget.QUICK_SEND) },
+                                    modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = TealAccent,
                                         contentColor = Color.Black
@@ -368,7 +434,10 @@ private fun WrangleTangleScreen() {
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("New Message")
                                 }
-                                OutlinedButton(onClick = { openGroupEditor(null) }) {
+                                OutlinedButton(
+                                    onClick = { openGroupEditor(null) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
                                     Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, contentDescription = null)
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("New Group")
@@ -394,10 +463,7 @@ private fun WrangleTangleScreen() {
                     }
 
                     items(groups, key = { it.id }) { group ->
-                        GroupCard(
-                            group = group,
-                            onOpen = { openGroupDetail(group.id) }
-                        )
+                        GroupCard(group = group, onOpen = { openGroupDetail(group.id) })
                     }
                 }
 
@@ -428,11 +494,7 @@ private fun WrangleTangleScreen() {
                                 }
                                 OutlinedButton(
                                     onClick = {
-                                        if (editorGroupId == null) {
-                                            goHome()
-                                        } else {
-                                            openGroupDetail(editorGroupId!!)
-                                        }
+                                        if (editorGroupId == null) goHome() else openGroupDetail(editorGroupId!!)
                                     }
                                 ) {
                                     Text("Cancel")
@@ -444,34 +506,18 @@ private fun WrangleTangleScreen() {
                     if (editorRecipients.isNotEmpty()) {
                         item {
                             StageFooterCard(
-                                text = "${editorRecipients.size} contact${if (editorRecipients.size == 1) "" else "s"} in this group"
-                            ) {
-                                saveEditorGroup()
-                            }
+                                text = "${editorRecipients.size} contact${if (editorRecipients.size == 1) "" else "s"} in this group",
+                                actionLabel = "Save group",
+                                onContinue = ::saveEditorGroup
+                            )
                         }
                     }
 
                     items(editorRecipients, key = { it.phoneNumber }) { recipient ->
                         RecipientEditorCard(
                             recipient = recipient,
-                            onRemove = {
-                                editorRecipients.removeAll { it.phoneNumber == recipient.phoneNumber }
-                            }
+                            onRemove = { editorRecipients.removeAll { it.phoneNumber == recipient.phoneNumber } }
                         )
-                    }
-
-                    item {
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Button(
-                                onClick = ::saveEditorGroup,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = TealAccent,
-                                    contentColor = Color.Black
-                                )
-                            ) {
-                                Text("Save Group")
-                            }
-                        }
                     }
                 }
 
@@ -532,27 +578,19 @@ private fun WrangleTangleScreen() {
 
                 WrangleScreen.COMPOSE -> {
                     item {
-                        PrimaryCard(title = "Sending to") {
+                        PrimaryCard(title = "To") {
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 composeRecipients.forEach { recipient ->
-                                    FilterChip(
-                                        selected = true,
-                                        onClick = {},
-                                        label = { Text(recipient.name) }
-                                    )
+                                    FilterChip(selected = true, onClick = {}, label = { Text(recipient.name) })
                                 }
                             }
                             Spacer(modifier = Modifier.height(14.dp))
                             OutlinedButton(
                                 onClick = {
-                                    if (selectedGroupId != null) {
-                                        screen = WrangleScreen.GROUP_DETAIL
-                                    } else {
-                                        screen = WrangleScreen.HOME
-                                    }
+                                    if (selectedGroupId != null) screen = WrangleScreen.GROUP_DETAIL else screen = WrangleScreen.HOME
                                 }
                             ) {
                                 Text(if (selectedGroupId != null) "Back to group" else "Back home")
@@ -561,30 +599,117 @@ private fun WrangleTangleScreen() {
                     }
 
                     item {
-                        PrimaryCard(title = "Message") {
+                        PrimaryCard(title = "Headline") {
                             OutlinedTextField(
-                                value = message,
-                                onValueChange = { message = it },
+                                value = headline,
+                                onValueChange = { headline = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                minLines = 6,
-                                maxLines = 10,
-                                label = { Text("Write the text once") },
+                                label = { Text("Title or subject") },
                                 supportingText = {
-                                    Text("WrangleTangle opens your SMS app one person at a time so you stay out of group chats.")
+                                    Text("Examples: RED ROCKS TONIGHT, DINNER UPDATE, PICKUP PLAN")
                                 }
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(
-                                onClick = ::beginNativeHandoff,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = TealAccent,
-                                    contentColor = Color.Black
-                                )
-                            ) {
-                                Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Open in SMS app")
+                        }
+                    }
+
+                    item {
+                        PrimaryCard(title = "Body") {
+                            OutlinedTextField(
+                                value = body,
+                                onValueChange = { body = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 5,
+                                maxLines = 9,
+                                label = { Text("Body text") },
+                                supportingText = {
+                                    Text("Use ::firstname:: if you want the preview to personalize the greeting.")
+                                }
+                            )
+                        }
+                    }
+
+                    item {
+                        PrimaryCard(title = "Image") {
+                            Text(
+                                text = "Optional hero image. This tries to hand off as MMS when your messaging app supports it.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Button(
+                                    onClick = { imagePicker.launch("image/*") },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = TealAccent,
+                                        contentColor = Color.Black
+                                    )
+                                ) {
+                                    Icon(Icons.Outlined.Image, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(if (selectedImageUri == null) "Add Photo" else "Change Photo")
+                                }
+                                if (selectedImageUri != null) {
+                                    OutlinedButton(onClick = { selectedImageUri = null }) {
+                                        Icon(Icons.Outlined.Delete, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Remove")
+                                    }
+                                }
                             }
+                            if (selectedImageUri != null) {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                AsyncImage(
+                                    model = selectedImageUri,
+                                    contentDescription = "Selected hero image",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(180.dp),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                        }
+                    }
+
+                    item {
+                        PrimaryCard(title = "Style") {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                MessageStylePreset.entries.forEach { preset ->
+                                    FilterChip(
+                                        selected = selectedStyle == preset,
+                                        onClick = { selectedStyle = preset },
+                                        label = { Text(preset.label) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        PrimaryCard(title = "Live Preview") {
+                            PreviewCard(
+                                recipient = sampleRecipient,
+                                headline = headline,
+                                body = body,
+                                imageUri = selectedImageUri,
+                                style = selectedStyle
+                            )
+                        }
+                    }
+
+                    item {
+                        Button(
+                            onClick = ::beginNativeHandoff,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = TealAccent,
+                                contentColor = Color.Black
+                            )
+                        ) {
+                            Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Send to ${composeRecipients.size} people")
                         }
                     }
                 }
@@ -596,7 +721,7 @@ private fun WrangleTangleScreen() {
                     item {
                         PrimaryCard(title = "Private SMS Handoff") {
                             Text(
-                                text = "WrangleTangle stays contacts-only. It opens your normal SMS app one recipient at a time with the message prefilled.",
+                                text = "WrangleTangle opens your messaging app one recipient at a time with the formatted message prefilled.",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(16.dp))
@@ -642,11 +767,23 @@ private fun WrangleTangleScreen() {
                         }
                     }
 
+                    item {
+                        PrimaryCard(title = "Current Layout") {
+                            PreviewCard(
+                                recipient = nextRecipient ?: sampleRecipient,
+                                headline = headline,
+                                body = body,
+                                imageUri = selectedImageUri,
+                                style = selectedStyle
+                            )
+                        }
+                    }
+
                     items(handoffRecipients, key = { it.phoneNumber }) { recipient ->
                         RecipientStatusCard(
                             recipient = recipient,
                             status = when {
-                                handoffRecipients.indexOf(recipient) < handoffIndex -> "Opened in SMS app"
+                                handoffRecipients.indexOf(recipient) < handoffIndex -> "Opened in Messages"
                                 recipient.phoneNumber == nextRecipient?.phoneNumber -> "Next"
                                 else -> "Queued"
                             }
@@ -656,16 +793,18 @@ private fun WrangleTangleScreen() {
 
                 WrangleScreen.COMPLETE -> {
                     item {
-                        PrimaryCard(title = "Sent to ${handoffRecipients.size} people") {
+                        PrimaryCard(title = "Ready in Messages") {
                             Text(
-                                text = "Each person received their own private SMS compose screen. Replies come back separately in your normal messaging app.",
+                                text = "WrangleTangle opened ${handoffRecipients.size} private compose screens through your messaging app.",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = handoffMessage,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
+                            PreviewCard(
+                                recipient = handoffRecipients.firstOrNull() ?: sampleRecipient,
+                                headline = headline,
+                                body = body,
+                                imageUri = selectedImageUri,
+                                style = selectedStyle
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -691,10 +830,7 @@ private fun WrangleTangleScreen() {
                     }
 
                     items(handoffRecipients, key = { it.phoneNumber }) { recipient ->
-                        RecipientStatusCard(
-                            recipient = recipient,
-                            status = "Opened in SMS app"
-                        )
+                        RecipientStatusCard(recipient = recipient, status = "Opened")
                     }
                 }
             }
@@ -731,6 +867,7 @@ private fun PrimaryCard(
 @Composable
 private fun StageFooterCard(
     text: String,
+    actionLabel: String,
     onContinue: () -> Unit
 ) {
     Card(
@@ -746,7 +883,7 @@ private fun StageFooterCard(
         ) {
             Text(text = text, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = onContinue) {
-                Text("Continue")
+                Text(actionLabel)
             }
         }
     }
@@ -893,7 +1030,7 @@ private fun RecipientStatusCard(
                 Icon(
                     imageVector = Icons.Outlined.CheckCircle,
                     contentDescription = null,
-                    tint = TealAccent
+                    tint = if (status == "Queued") MaterialTheme.colorScheme.onSurfaceVariant else TealAccent
                 )
                 Text(
                     text = status,
@@ -901,6 +1038,53 @@ private fun RecipientStatusCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PreviewCard(
+    recipient: ContactRecipient,
+    headline: String,
+    body: String,
+    imageUri: Uri?,
+    style: MessageStylePreset
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = style.cardColor),
+        shape = RoundedCornerShape(24.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, style.borderColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (imageUri != null) {
+                AsyncImage(
+                    model = imageUri,
+                    contentDescription = "Preview image",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            Text(
+                text = (headline.ifBlank { "TONIGHT'S PLAN" }).uppercase(),
+                color = style.headlineColor,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Black
+            )
+            Text(
+                text = applyPersonalization(
+                    body.ifBlank { "Hey ::firstname::, leaving at 6:15. Meet at the south lot bar." },
+                    recipient
+                ),
+                color = style.bodyColor,
+                style = MaterialTheme.typography.bodyLarge
+            )
         }
     }
 }
@@ -929,11 +1113,52 @@ private fun buildContactPickerIntent(): Intent {
     }
 }
 
-private fun buildSmsComposeIntent(phoneNumber: String, message: String): Intent {
-    val destination = Uri.encode(phoneNumber)
-    return Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$destination")).apply {
-        putExtra("sms_body", message)
+private fun buildMessagingIntent(
+    recipient: ContactRecipient,
+    formattedMessage: String,
+    imageUri: Uri?
+): Intent {
+    if (imageUri == null) {
+        return Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${Uri.encode(recipient.phoneNumber)}")).apply {
+            putExtra("sms_body", formattedMessage)
+        }
     }
+
+    return Intent(Intent.ACTION_SEND).apply {
+        type = "image/*"
+        putExtra("address", recipient.phoneNumber)
+        putExtra("sms_body", formattedMessage)
+        putExtra(Intent.EXTRA_STREAM, imageUri)
+        clipData = ClipData.newUri(null, "message-image", imageUri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+}
+
+private fun buildFormattedMessage(
+    recipient: ContactRecipient,
+    headline: String,
+    body: String
+): String {
+    val safeHeadline = headline.trim()
+    val safeBody = applyPersonalization(body.trim(), recipient)
+    return buildString {
+        if (safeHeadline.isNotBlank()) {
+            append(safeHeadline.uppercase())
+        }
+        if (safeHeadline.isNotBlank() && safeBody.isNotBlank()) {
+            append("\n\n")
+        }
+        if (safeBody.isNotBlank()) {
+            append(safeBody)
+        }
+    }.ifBlank { "Hi ${recipient.name}," }
+}
+
+private fun applyPersonalization(
+    text: String,
+    recipient: ContactRecipient
+): String {
+    return text.replace("::firstname::", recipient.name.substringBefore(" ").trim())
 }
 
 private fun extractRecipientsFromIntent(context: Context, data: Intent?): List<ContactRecipient> {
