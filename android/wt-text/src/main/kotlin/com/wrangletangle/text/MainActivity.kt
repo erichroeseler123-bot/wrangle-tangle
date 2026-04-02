@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
+import android.telephony.TelephonyManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -340,6 +342,38 @@ private fun WrangleTangleScreen() {
                 handoffRecipients.addAll(composeRecipients)
                 handoffIndex = 0
                 screen = WrangleScreen.HANDOFF
+            }
+        }
+    }
+
+    fun testSendToMyself() {
+        when {
+            headline.isBlank() && body.isBlank() -> toast(context, "Add a headline or body first.")
+            else -> {
+                val selfNumber = resolveDevicePhoneNumber(context)
+                if (selfNumber.isNullOrBlank()) {
+                    toast(context, "Could not find this device's phone number.")
+                    return
+                }
+
+                val selfRecipient = ContactRecipient(name = "You", phoneNumber = selfNumber)
+                val formattedMessage = buildFormattedMessage(
+                    recipient = selfRecipient,
+                    headline = headline,
+                    body = body
+                )
+                val intent = buildMessagingIntent(
+                    recipient = selfRecipient,
+                    formattedMessage = formattedMessage,
+                    imageUri = selectedImageUri
+                )
+
+                if (intent.resolveActivity(context.packageManager) == null) {
+                    toast(context, "No messaging app available on this device.")
+                    return
+                }
+
+                context.startActivity(intent)
             }
         }
     }
@@ -772,17 +806,28 @@ private fun WrangleTangleScreen() {
                     }
 
                     item {
-                        Button(
-                            onClick = ::beginNativeHandoff,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = TealAccent,
-                                contentColor = Color.Black
-                            )
-                        ) {
-                            Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Send to ${composeRecipients.size} people")
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(
+                                onClick = ::beginNativeHandoff,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = TealAccent,
+                                    contentColor = Color.Black
+                                )
+                            ) {
+                                Icon(Icons.AutoMirrored.Outlined.Send, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Send to ${composeRecipients.size} people")
+                            }
+
+                            OutlinedButton(
+                                onClick = ::testSendToMyself,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Outlined.PhoneAndroid, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Test Send to Myself")
+                            }
                         }
                     }
                 }
@@ -1274,6 +1319,12 @@ private fun hasContactsPermission(context: Context): Boolean {
         context,
         Manifest.permission.READ_CONTACTS
     ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+}
+
+private fun resolveDevicePhoneNumber(context: Context): String? {
+    val telephonyManager = context.getSystemService(TelephonyManager::class.java) ?: return null
+    @Suppress("DEPRECATION")
+    return telephonyManager.line1Number?.trim()?.takeIf { it.isNotBlank() }
 }
 
 private fun loadGroups(context: Context): List<SavedGroup> {
